@@ -284,46 +284,35 @@
         document.getElementById('loadingOverlay').style.display = 'none';
     }
 
-    // Fungsi untuk ganti jersey menggunakan AJAX (tanpa reload halaman)
+    // Fungsi untuk ganti jersey (Stateless Architecture)
     function changeJersey(jerseyName) {
         console.log('Changing jersey to:', jerseyName);
         showLoading();
         
-        // Kirim request AJAX ke backend
-        fetch('/change_jersey/' + encodeURIComponent(jerseyName), {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                console.log('Jersey changed successfully:', data.jersey);
-                currentJersey = jerseyName;
-                
-                // Update UI - highlight jersey yang aktif
-                updateActiveJersey(jerseyName);
-                
-                // Update badge jersey aktif
-                const badge = document.querySelector('.badge-current');
-                if (badge) {
-                    badge.textContent = jerseyName;
-                }
-                
-                // Hide loading setelah 1 detik (beri waktu untuk backend processing)
-                setTimeout(hideLoading, 1000);
-            } else {
-                console.error('Failed to change jersey:', data.message);
-                alert('Gagal mengganti jersey: ' + data.message);
-                hideLoading();
-            }
-        })
-        .catch(error => {
-            console.error('Error changing jersey:', error);
-            alert('Terjadi kesalahan saat mengganti jersey');
-            hideLoading();
-        });
+        // Update variabel global JS
+        currentJersey = jerseyName;
+        
+        // Dapatkan elemen video
+        const videoStream = document.getElementById('videoStream');
+        
+        // --- LOGIKA UTAMA ---
+        // Kita ubah src gambar. Ini memaksa browser memutus koneksi lama
+        // dan membuat koneksi baru ke server dengan membawa parameter jersey.
+        // Kita tambah timestamp (&t=...) agar browser tidak menggunakan cache lama.
+        const newUrl = `/video_feed?jersey=${encodeURIComponent(jerseyName)}&t=${new Date().getTime()}`;
+        
+        console.log('New video URL:', newUrl);
+        videoStream.src = newUrl;
+        
+        // Update tampilan UI (tombol aktif, badge, dll)
+        updateActiveJersey(jerseyName);
+        const badge = document.querySelector('.badge-current');
+        if (badge) {
+            badge.textContent = jerseyName.replace('.png', '');
+        }
+        
+        // Sembunyikan loading saat gambar baru mulai dimuat
+        setTimeout(hideLoading, 1000);
     }
     
     // Adjustment slider handlers

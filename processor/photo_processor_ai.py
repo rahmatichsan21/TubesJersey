@@ -21,15 +21,39 @@ import mediapipe as mp
 class PhotoProcessor:
     def __init__(self):
         print("[PHOTO] Initializing Final Polish Processor...")
-        # (Setup model sama seperti sebelumnya...)
+        
+        # GPU Detection & Setup
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            print(f"[GPU] ✓ CUDA Available!")
+            print(f"[GPU] Device: {torch.cuda.get_device_name(0)}")
+            print(f"[GPU] CUDA Version: {torch.version.cuda}")
+            print(f"[GPU] Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+            # Optimize CUDA performance
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cuda.matmul.allow_tf32 = True
+        else:
+            print("[GPU] ✗ CUDA not available, using CPU")
+        
+        # Load Segmentation Model
         MODEL_NAME = "matei-dorian/segformer-b5-finetuned-human-parsing"
         try:
+            print(f"[MODEL] Loading {MODEL_NAME}...")
             self.processor = SegformerImageProcessor.from_pretrained(MODEL_NAME)
             self.model = AutoModelForSemanticSegmentation.from_pretrained(MODEL_NAME)
             self.model.eval()
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.model.to(self.device)
-        except Exception as e: print(f"[ERROR] {e}"); self.processor=None
+            
+            # Enable mixed precision for faster inference on GPU
+            if torch.cuda.is_available():
+                self.model = self.model.half()  # Use FP16 for faster processing
+                print("[GPU] Using FP16 mixed precision for faster inference")
+            
+            print(f"[MODEL] ✓ Model loaded on {self.device}")
+        except Exception as e: 
+            print(f"[ERROR] Failed to load model: {e}")
+            self.processor = None
+            self.model = None
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(static_image_mode=True, model_complexity=2)
         self.jersey_landmarks = {}
@@ -159,9 +183,19 @@ class PhotoProcessor:
         rembg_out = remove(pil_img)
         body_mask = (np.array(rembg_out)[:,:,3] > 127).astype(np.uint8) * 255
         
-        inputs = self.processor(images=pil_img, return_tensors="pt").to(self.device)
-        with torch.no_grad(): out = self.model(**inputs)
-        logits = nn.functional.interpolate(out.logits.cpu(), size=(h,w), mode="bilinear", align_corners=False)
+        inputs = self.processor(images=pil_img, return_tensors="pt")
+        
+        # Move to GPU and use appropriate dtype
+        if torch.cuda.is_available():
+            inputs = {k: v.to(self.device).half() for k, v in inputs.items()}
+        else:
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        
+        with torch.no_grad():
+            with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+                out = self.model(**inputs)
+        
+        logits = nn.functional.interpolate(out.logits.float().cpu(), size=(h,w), mode="bilinear", align_corners=False)
         seg = logits.argmax(dim=1)[0].numpy()
 
         shirt_mask_precise = np.isin(seg, [4, 7]).astype(np.uint8) * 255 

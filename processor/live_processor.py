@@ -17,10 +17,15 @@ class LiveStreamProcessor:
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
         )
+        # MEMORI: Menyimpan koordinat frame sebelumnya [LeftShoulder, RightShoulder]
+        self.prev_shoulders = None
+        # Alpha: Seberapa "berat" smoothingnya.
+        # 0.1 = Sangat Smooth (Lambat), 0.9 = Sangat Responsif (Getar)
+        self.smooth_factor = 0.6
         
     def process_frame(self, user_frame, jersey_img, meta=None, scales=(0.0, 0.2, 0.1)):
         """
-        Process single video frame with jersey overlay (FAST)
+        Process single video frame with jersey overlay (FAST + SAFE)
         
         Args:
             user_frame: Frame dari webcam (BGR)
@@ -32,11 +37,26 @@ class LiveStreamProcessor:
             Processed frame dengan jersey overlay
         """
         try:
+            # 1. Validasi Input Basic
+            if user_frame is None:
+                return None
+            
             _, scale_y_up, scale_y_down = scales
             h, w, _ = user_frame.shape
             
+            # Jika tidak ada jersey, kembalikan frame asli langsung
             if jersey_img is None:
                 return user_frame
+            
+            # 2. Safety Check: Pastikan Jersey punya Alpha Channel (4 channels)
+            # Jika JPG (3 channels), tambah alpha manual
+            if len(jersey_img.shape) < 3 or jersey_img.shape[2] < 4:
+                if len(jersey_img.shape) == 3 and jersey_img.shape[2] == 3:
+                    b, g, r = cv2.split(jersey_img)
+                    alpha = np.ones_like(b) * 255  # Alpha full (tidak transparan)
+                    jersey_img = cv2.merge((b, g, r, alpha))
+                else:
+                    return user_frame  # Invalid image format
             
             jh, jw, _ = jersey_img.shape
             
@@ -63,6 +83,30 @@ class LiveStreamProcessor:
             
             ls = np.array([int(ls_pt.x * w), int(ls_pt.y * h)])
             rs = np.array([int(rs_pt.x * w), int(rs_pt.y * h)])
+            
+            # --- LOGIKA SMOOTHING (Anti-Jitter) ---
+            current_shoulders = np.array([ls, rs])
+            
+            if self.prev_shoulders is None:
+                # Frame pertama: simpan langsung
+                self.prev_shoulders = current_shoulders
+            else:
+                # Rumus EMA: Smooth = (Current * Alpha) + (Prev * (1 - Alpha))
+                diff = current_shoulders - self.prev_shoulders
+                # Hitung jarak pergerakan
+                dist = np.linalg.norm(diff)
+                
+                # Dynamic Alpha: Kalau gerak cepat, alpha tinggi (0.9). Kalau diam, alpha rendah (0.5)
+                dynamic_alpha = self.smooth_factor
+                if dist > 50:  # Gerakan cepat/besar
+                    dynamic_alpha = 0.9  # Lebih responsif
+                
+                self.prev_shoulders = (current_shoulders * dynamic_alpha + 
+                                     self.prev_shoulders * (1 - dynamic_alpha)).astype(int)
+            
+            # Pakai koordinat yang sudah di-smooth
+            ls = self.prev_shoulders[0]
+            rs = self.prev_shoulders[1]
             
             # Hip reference
             if lh_pt.visibility > 0.5 and rh_pt.visibility > 0.5:
@@ -142,19 +186,40 @@ class LiveStreamProcessor:
                 cv2.ellipse(warped_jersey, (neck_cx, neck_cy - int(nh*0.5)), (nw, int(nh*0.8)), 0, 180, 360, (40,40,40,200), -1)
                 cv2.ellipse(warped_jersey, (neck_cx, neck_cy), (nw, nh), 0, 0, 180, (0,0,0,0), -1)
             
-            # Simple alpha blending (FAST)
-            result = user_frame.copy()
-            jersey_alpha = warped_jersey[:, :, 3] / 255.0
+            # Safety check: Pastikan warped_jersey dan user_frame ukurannya sama
+            if warped_jersey.shape[:2] != user_frame.shape[:2]:
+                warped_jersey = cv2.resize(warped_jersey, (w, h))
             
-            for c in range(3):
-                result[:, :, c] = (jersey_alpha * warped_jersey[:, :, c] + 
-                                  (1 - jersey_alpha) * user_frame[:, :, c])
+            # Safety check: Pastikan warped_jersey punya 4 channels
+            if warped_jersey.shape[2] < 4:
+                return user_frame  # Skip blending jika tidak ada alpha
+            
+            # --- ALPHA BLENDING OPTIMAL (VECTORIZED) ---
+            # 1. Normalisasi Alpha Channel (0.0 - 1.0)
+            # Ubah dimensi dari (H, W) menjadi (H, W, 1) agar bisa dikalikan ke 3 channel warna (BGR)
+            alpha_channel = (warped_jersey[:, :, 3] / 255.0).astype(np.float32)
+            alpha_channel = np.expand_dims(alpha_channel, axis=2)  # Shape jadi (H, W, 1)
+            
+            # 2. Ambil komponen warna Jersey (BGR) dan Background (User)
+            jersey_bgr = warped_jersey[:, :, :3].astype(np.float32)
+            user_bgr = user_frame.astype(np.float32)
+            
+            # 3. Blending Matriks (Vectorized Operation)
+            # Rumus: (Jersey * Alpha) + (User * (1 - Alpha))
+            # Ini dilakukan sekaligus untuk jutaan pixel dalam hitungan milidetik
+            blended = (jersey_bgr * alpha_channel) + (user_bgr * (1.0 - alpha_channel))
+            
+            # 4. Kembalikan ke format Integer 8-bit (Gambar valid)
+            result = blended.astype(np.uint8)
             
             return result
             
         except Exception as e:
             print(f"[LIVE ERROR]: {e}")
-            return user_frame
+            import traceback
+            traceback.print_exc()
+            # PENTING: Jika error, kembalikan frame asli. Jangan biarkan layar hitam!
+            return user_frame if user_frame is not None else None
     
     def _get_torso_width_smart(self, body_mask, shoulder_y, hip_y, center_x, w):
         """Deteksi lebar torso dari segmentation mask"""

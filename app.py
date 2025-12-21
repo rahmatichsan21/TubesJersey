@@ -37,10 +37,26 @@ with open(LANDMARKS_FILE, 'r') as f:
     jersey_landmarks = json.load(f)
 
 # Inisialisasi AI Processor (Load Model Sekali Saja di Awal)
-print("[INIT] Loading AI Models...")
+print("="*60)
+print("[INIT] Virtual Try-On System Starting...")
+print("="*60)
+
+# Check GPU availability
+try:
+    import torch
+    if torch.cuda.is_available():
+        print(f"[SYSTEM] GPU Acceleration: ENABLED ✓")
+        print(f"[SYSTEM] GPU Device: {torch.cuda.get_device_name(0)}")
+    else:
+        print("[SYSTEM] GPU Acceleration: DISABLED (CPU mode)")
+except ImportError:
+    print("[SYSTEM] PyTorch not available")
+
+print("\n[INIT] Loading AI Models...")
 processor = PhotoProcessor()
-live_processor = LiveStreamProcessor()
-print("[INIT] Ready!")
+print("\n" + "="*60)
+print("[INIT] ✓ System Ready!")
+print("="*60 + "\n")
 
 # Helper: Cek ekstensi file
 def allowed_file(filename):
@@ -173,32 +189,82 @@ def live():
     jerseys = get_jerseys()
     return render_template('live.html', jerseys=jerseys)
 
-# Global variables untuk live streaming
+# Cache untuk menyimpan gambar jersey yang sudah di-load agar cepat
+# Format: {'NamaJersey.png': (image_data, metadata)}
+JERSEY_CACHE = {}
 camera = None
-current_jersey = None
-current_jersey_img = None
-current_jersey_meta = None
 
 def get_camera():
-    """Get atau initialize camera"""
+    """Get atau initialize camera dengan retry mechanism"""
     global camera
     if camera is None:
+        print("[CAMERA] Initializing camera...")
         camera = cv2.VideoCapture(0)
         camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency
+    
+    # Jika camera tidak terbuka, coba buka ulang
+    if not camera.isOpened():
+        print("[CAMERA] Camera not opened, trying to reopen...")
+        camera.release()
+        camera = cv2.VideoCapture(0)
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        
     return camera
 
-def generate_frames():
-    """Generator function untuk video streaming"""
-    global current_jersey_img
-    
+def generate_frames(jersey_name=None):
+    """Generator function dengan Local Processor (Anti-Jitter per User)"""
     cam = get_camera()
     
+    # 1. INIT PROCESSOR LOKAL (Agar punya memori smoothing sendiri per user)
+    # Import sudah ada di atas: from processor.live_processor import LiveStreamProcessor
+    local_live_processor = LiveStreamProcessor()
+    print(f"[SESSION] Created new LiveStreamProcessor for session")
+    
+    # Hard check - pastikan camera benar-benar terbuka
     if not cam.isOpened():
-        print("[ERROR] Camera tidak dapat dibuka!")
+        print("[FATAL] Kamera tidak terdeteksi atau dikunci aplikasi lain!")
+        # Kirim frame error
+        error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(error_frame, "Camera Error", (200, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        ret, buffer = cv2.imencode('.jpg', error_frame)
+        if ret:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
         return
     
-    print("[INFO] Camera streaming dimulai...")
+    # 1. Siapkan Jersey (Ambil dari Cache atau Load Baru)
+    active_jersey_img = None
+    active_jersey_meta = None
+    
+    if jersey_name and jersey_name != 'null' and jersey_name != 'None':
+        # Cek apakah ada di cache?
+        if jersey_name in JERSEY_CACHE:
+            active_jersey_img, active_jersey_meta = JERSEY_CACHE[jersey_name]
+            print(f"[CACHE HIT] Using cached jersey: {jersey_name}")
+        else:
+            # Jika belum ada, load dari disk lalu simpan ke cache
+            path = os.path.join(JERSEY_FOLDER, jersey_name)
+            if os.path.exists(path):
+                img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+                
+                # SAFETY: Jika JPG (3 channel), tambah alpha channel
+                if img is not None and len(img.shape) == 3 and img.shape[2] == 3:
+                    print(f"[INFO] Converting JPG to RGBA for: {jersey_name}")
+                    b, g, r = cv2.split(img)
+                    alpha = np.ones_like(b) * 255
+                    img = cv2.merge((b, g, r, alpha))
+                
+                meta = jersey_metadata.get(jersey_name, None)
+                if img is not None:
+                    JERSEY_CACHE[jersey_name] = (img, meta)  # Simpan ke cache
+                    active_jersey_img = img
+                    active_jersey_meta = meta
+                    print(f"[CACHE MISS] Loaded & Cached: {jersey_name}")
+    
+    print(f"[INFO] Camera streaming dimulai... Jersey: {jersey_name or 'None'}")
     frame_count = 0
     
     while True:
@@ -208,18 +274,20 @@ def generate_frames():
             break
         
         frame_count += 1
-        if frame_count % 30 == 0:  # Log setiap 30 frame
-            print(f"[INFO] Frame #{frame_count} - Shape: {frame.shape}")
+        if frame_count % 90 == 0:  # Log setiap 90 frame (3 detik @ 30fps)
+            print(f"[INFO] Frame #{frame_count} - Jersey: {jersey_name or 'None'}")
         
-        # Jika ada jersey yang dipilih, overlay jersey
-        if current_jersey_img is not None:
+        # 2. Proses frame menggunakan jersey yang diminta USER INI
+        if active_jersey_img is not None:
             try:
-                frame = live_processor.process_frame(
+                processed = local_live_processor.process_frame(
                     user_frame=frame,
-                    jersey_img=current_jersey_img,
-                    meta=current_jersey_meta,  # Pass metadata untuk collar handling
+                    jersey_img=active_jersey_img,
+                    meta=active_jersey_meta,
                     scales=(0.0, 0.2, 0.1)
                 )
+                if processed is not None:
+                    frame = processed
             except Exception as e:
                 print(f"[ERROR] Processing frame: {e}")
                 import traceback
@@ -239,74 +307,14 @@ def generate_frames():
 
 @app.route('/video_feed')
 def video_feed():
-    """Video streaming route untuk live camera"""
+    """Video streaming route untuk live camera (Stateless)"""
+    # Ambil nama jersey dari URL parameter (contoh: /video_feed?jersey=Arsenal.png)
+    selected_jersey = request.args.get('jersey')
+    
     return Response(
-        generate_frames(),
+        generate_frames(selected_jersey),  # Kirim nama jersey ke generator
         mimetype='multipart/x-mixed-replace; boundary=frame'
     )
-
-@app.route('/set_jersey', methods=['POST'])
-def set_jersey():
-    """Set jersey yang akan dioverlay pada live stream"""
-    global current_jersey, current_jersey_img, current_jersey_meta
-    
-    data = request.get_json()
-    jersey_name = data.get('jersey')
-    
-    if not jersey_name:
-        current_jersey = None
-        current_jersey_img = None
-        current_jersey_meta = None
-        return jsonify({'status': 'ok', 'message': 'Jersey cleared'})
-    
-    jersey_path = os.path.join(JERSEY_FOLDER, jersey_name)
-    
-    if not os.path.exists(jersey_path):
-        return jsonify({'status': 'error', 'message': 'Jersey not found'})
-    
-    # Load jersey dengan alpha channel
-    jersey_img = cv2.imread(jersey_path, cv2.IMREAD_UNCHANGED)
-    
-    if jersey_img is None:
-        return jsonify({'status': 'error', 'message': 'Failed to load jersey'})
-    
-    # Load metadata untuk jersey ini
-    meta = jersey_metadata.get(jersey_name, None)
-    
-    current_jersey = jersey_name
-    current_jersey_img = jersey_img
-    current_jersey_meta = meta
-    
-    return jsonify({'status': 'ok', 'jersey': jersey_name})
-
-@app.route('/change_jersey/<jersey_name>', methods=['GET'])
-def change_jersey(jersey_name):
-    """Endpoint untuk mengganti jersey di live stream (dipanggil dari live.html)"""
-    global current_jersey, current_jersey_img, current_jersey_meta
-    
-    jersey_path = os.path.join(JERSEY_FOLDER, jersey_name)
-    
-    if not os.path.exists(jersey_path):
-        return jsonify({'success': False, 'message': 'Jersey not found'})
-    
-    # Load jersey dengan alpha channel
-    jersey_img = cv2.imread(jersey_path, cv2.IMREAD_UNCHANGED)
-    
-    if jersey_img is None:
-        return jsonify({'success': False, 'message': 'Failed to load jersey'})
-    
-    # Load metadata untuk jersey ini
-    meta = jersey_metadata.get(jersey_name, None)
-    if meta is None:
-        print(f"[WARNING] No metadata found for {jersey_name}")
-    else:
-        print(f"[INFO] Loaded metadata for {jersey_name}")
-    
-    current_jersey = jersey_name
-    current_jersey_img = jersey_img
-    current_jersey_meta = meta
-    
-    return jsonify({'success': True, 'jersey': jersey_name})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
