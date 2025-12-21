@@ -1,0 +1,441 @@
+{% extends "layout.html" %}
+
+{% block title %}Live Streaming - Jersey Virtual Try-On{% endblock %}
+
+{% block extra_css %}
+<style>
+    .video-container {
+        position: relative;
+        background: #000;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+    
+    .video-stream {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+    
+    .jersey-selector {
+        max-height: 600px;
+        overflow-y: auto;
+    }
+    
+    .jersey-selector::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .jersey-selector::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+    }
+    
+    .jersey-selector::-webkit-scrollbar-thumb {
+        background: #667eea;
+        border-radius: 10px;
+    }
+    
+    .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.2rem;
+        z-index: 10;
+    }
+    
+    .jersey-btn {
+        width: 100%;
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .jersey-btn:hover {
+        background-color: #e7e7ff !important;
+    }
+    
+    .badge-current {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="text-white fw-bold mb-0">
+                    <i class="bi bi-camera-video me-2"></i>Live Streaming
+                </h2>
+                <p class="text-white-50 mb-0">Real-time jersey virtual try-on</p>
+            </div>
+            <a href="/" class="btn btn-outline-light">
+                <i class="bi bi-arrow-left me-2"></i>Kembali
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Video Stream Section -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="video-container" id="videoContainer">
+                    <img src="{{ url_for('video_feed') }}" class="video-stream" alt="Live Stream" id="videoStream">
+                    <div class="loading-overlay" id="loadingOverlay" style="display: flex;">
+                        <div class="text-center">
+                            <div class="spinner-border text-light mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <div>Memuat jersey...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-light">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <div class="spinner-grow spinner-grow-sm text-danger" role="status">
+                            <span class="visually-hidden">Live</span>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <small class="text-muted">
+                            <strong>LIVE</strong> - Jersey Aktif: 
+                            <span class="badge badge-current">{{ current_jersey }}</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Adjustment Controls Card -->
+        <div class="card mt-4">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0">
+                    <i class="bi bi-sliders me-2"></i>Adjustment Controls
+                </h6>
+            </div>
+            <div class="card-body">
+                <!-- Offset X -->
+                <div class="mb-3">
+                    <label for="offsetX" class="form-label small fw-semibold">
+                        Posisi Horizontal (X): <span id="offsetXValue">0</span>px
+                    </label>
+                    <input type="range" class="form-range" min="-100" max="100" value="0" id="offsetX">
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">Kiri</small>
+                        <small class="text-muted">Kanan</small>
+                    </div>
+                </div>
+
+                <!-- Offset Y -->
+                <div class="mb-3">
+                    <label for="offsetY" class="form-label small fw-semibold">
+                        Posisi Vertikal (Y): <span id="offsetYValue">0</span>px
+                    </label>
+                    <input type="range" class="form-range" min="-100" max="100" value="0" id="offsetY">
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">Atas</small>
+                        <small class="text-muted">Bawah</small>
+                    </div>
+                </div>
+
+                <!-- Scale -->
+                <div class="mb-3">
+                    <label for="scale" class="form-label small fw-semibold">
+                        Ukuran (Scale): <span id="scaleValue">100</span>%
+                    </label>
+                    <input type="range" class="form-range" min="50" max="150" value="100" id="scale">
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">50%</small>
+                        <small class="text-muted">150%</small>
+                    </div>
+                </div>
+
+                <!-- Reset Button -->
+                <button class="btn btn-sm btn-outline-secondary w-100" onclick="resetAdjustments()">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset ke Default
+                </button>
+            </div>
+        </div>
+
+        <!-- Tips Card -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h6 class="card-title fw-bold">
+                    <i class="bi bi-lightbulb text-warning me-2"></i>Tips untuk Hasil Terbaik:
+                </h6>
+                <ul class="mb-0 small">
+                    <li>Pastikan pencahayaan ruangan cukup terang</li>
+                    <li>Posisikan tubuh menghadap kamera secara langsung</li>
+                    <li>Berdiri dengan jarak 1-2 meter dari kamera</li>
+                    <li>Pastikan seluruh tubuh bagian atas terlihat di frame</li>
+                    <li>Hindari background yang terlalu ramai</li>
+                    <li><strong>Gunakan slider adjustment untuk posisi yang sempurna</strong></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Jersey Selector Section -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-grid-3x3-gap me-2"></i>Pilih Jersey
+                </h5>
+            </div>
+            <div class="card-body p-3 jersey-selector">
+                {% if jerseys %}
+                    <div class="list-group" id="jerseyList">
+                        {% for jersey in jerseys %}
+                        <button type="button"
+                           class="list-group-item list-group-item-action jersey-btn {% if jersey == current_jersey %}active{% endif %}"
+                           data-jersey="{{ jersey }}"
+                           onclick="changeJersey('{{ jersey }}')">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-box-seam me-3"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold">{{ jersey.replace('.png', '').replace('_', ' ') }}</div>
+                                </div>
+                                {% if jersey == current_jersey %}
+                                <i class="bi bi-check-circle-fill text-white"></i>
+                                {% endif %}
+                            </div>
+                        </button>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning mb-0">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Tidak ada jersey yang tersedia. Pastikan folder jersey sudah terisi.
+                    </div>
+                {% endif %}
+            </div>
+            <div class="card-footer bg-light">
+                <small class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Total {{ jerseys|length }} jersey tersedia
+                </small>
+            </div>
+        </div>
+
+        <!-- Status Card -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h6 class="card-title fw-bold mb-3">
+                    <i class="bi bi-speedometer2 me-2"></i>Status Sistem
+                </h6>
+                <div class="mb-2">
+                    <small class="text-muted">Camera Status:</small>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    <small class="text-success">
+                        <i class="bi bi-check-circle-fill me-1"></i>Active
+                    </small>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">Processing:</small>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-info" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    <small class="text-info">
+                        <i class="bi bi-check-circle-fill me-1"></i>Running
+                    </small>
+                </div>
+                <div>
+                    <small class="text-muted">Jersey Loaded:</small>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-primary" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    <small class="text-primary">
+                        <i class="bi bi-check-circle-fill me-1"></i>Ready
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentJersey = "{{ current_jersey }}";
+    
+    function showLoading() {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+    }
+    
+    function hideLoading() {
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }
+
+    // Fungsi untuk ganti jersey menggunakan AJAX (tanpa reload halaman)
+    function changeJersey(jerseyName) {
+        console.log('Changing jersey to:', jerseyName);
+        showLoading();
+        
+        // Kirim request AJAX ke backend
+        fetch('/change_jersey/' + encodeURIComponent(jerseyName), {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('Jersey changed successfully:', data.jersey);
+                currentJersey = jerseyName;
+                
+                // Update UI - highlight jersey yang aktif
+                updateActiveJersey(jerseyName);
+                
+                // Update badge jersey aktif
+                const badge = document.querySelector('.badge-current');
+                if (badge) {
+                    badge.textContent = jerseyName;
+                }
+                
+                // Hide loading setelah 1 detik (beri waktu untuk backend processing)
+                setTimeout(hideLoading, 1000);
+            } else {
+                console.error('Failed to change jersey:', data.message);
+                alert('Gagal mengganti jersey: ' + data.message);
+                hideLoading();
+            }
+        })
+        .catch(error => {
+            console.error('Error changing jersey:', error);
+            alert('Terjadi kesalahan saat mengganti jersey');
+            hideLoading();
+        });
+    }
+    
+    // Adjustment slider handlers
+    function updateAdjustments() {
+        const offsetX = document.getElementById('offsetX').value;
+        const offsetY = document.getElementById('offsetY').value;
+        const scale = document.getElementById('scale').value;
+        
+        // Update display values
+        document.getElementById('offsetXValue').textContent = offsetX;
+        document.getElementById('offsetYValue').textContent = offsetY;
+        document.getElementById('scaleValue').textContent = scale;
+        
+        // Send adjustments to backend
+        fetch('/update_adjustments', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                offset_x: parseInt(offsetX),
+                offset_y: parseInt(offsetY),
+                scale: parseFloat(scale) / 100.0
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Adjustments updated:', data);
+        })
+        .catch(error => {
+            console.error('Error updating adjustments:', error);
+        });
+    }
+    
+    function resetAdjustments() {
+        document.getElementById('offsetX').value = 0;
+        document.getElementById('offsetY').value = 0;
+        document.getElementById('scale').value = 100;
+        updateAdjustments();
+    }
+    
+    // Add event listeners for sliders
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('offsetX').addEventListener('input', updateAdjustments);
+        document.getElementById('offsetY').addEventListener('input', updateAdjustments);
+        document.getElementById('scale').addEventListener('input', updateAdjustments);
+    });
+
+    // Update tampilan button jersey yang aktif
+    function updateActiveJersey(jerseyName) {
+        const jerseyButtons = document.querySelectorAll('.jersey-btn');
+        jerseyButtons.forEach(button => {
+            const buttonJersey = button.getAttribute('data-jersey');
+            if (buttonJersey === jerseyName) {
+                button.classList.add('active');
+                // Tambahkan checkmark icon jika belum ada
+                const checkIcon = button.querySelector('.bi-check-circle-fill');
+                if (!checkIcon) {
+                    const icon = document.createElement('i');
+                    icon.className = 'bi bi-check-circle-fill text-white';
+                    button.querySelector('.d-flex').appendChild(icon);
+                }
+            } else {
+                button.classList.remove('active');
+                // Hapus checkmark icon
+                const checkIcon = button.querySelector('.bi-check-circle-fill');
+                if (checkIcon) {
+                    checkIcon.remove();
+                }
+            }
+        });
+    }
+
+    // Force load video feed on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('=== Page DOMContentLoaded ===');
+        
+        const videoStream = document.getElementById('videoStream');
+        const videoUrl = '/video_feed';
+        
+        console.log('Loading video from:', videoUrl);
+        console.log('Current src before:', videoStream.src);
+        
+        // Set src langsung tanpa setTimeout
+        videoStream.src = videoUrl;
+        
+        console.log('Current src after:', videoStream.src);
+        
+        // Hide loading after 2 seconds
+        setTimeout(hideLoading, 2000);
+    });
+
+    // Handle video stream error (auto-retry)
+    document.getElementById('videoStream').onerror = function() {
+        console.error('Error loading video stream, retrying...');
+        setTimeout(() => {
+            this.src = '/video_feed';
+        }, 1000);
+    };
+    
+    // Handle video stream load success
+    document.getElementById('videoStream').onload = function() {
+        console.log('=== Video stream ONLOAD event triggered ===');
+        console.log('Stream src:', this.src);
+        hideLoading();
+    };
+    
+    // More detailed error handler
+    document.getElementById('videoStream').addEventListener('error', function(e) {
+        console.error('=== Video stream ERROR ===');
+        console.error('Error event:', e);
+        console.error('Attempted src:', this.src);
+    });
+</script>
+{% endblock %}

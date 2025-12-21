@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Try-On Studio - Jersey Fitting</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            background: white; 
+            border-radius: 16px; 
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 { 
+            font-size: 2.5em; 
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header p { 
+            font-size: 1.1em; 
+            opacity: 0.9;
+        }
+        
+        /* Content Area */
+        .content {
+            padding: 40px;
+        }
+        
+        /* Upload Form */
+        .upload-section {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .form-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s;
+        }
+        
+        .form-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+            text-align: left;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .form-group label .step {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            margin-right: 8px;
+            font-size: 0.9em;
+        }
+        
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        input[type="file"]:hover {
+            background: #f8f9ff;
+            border-color: #764ba2;
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 1em;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        /* Buttons */
+        button, .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            font-size: 1.1em;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:hover, .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        button:active, .btn:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        button.secondary, .btn.secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            box-shadow: 0 4px 15px rgba(108, 117, 125, 0.4);
+        }
+        
+        button.secondary:hover, .btn.secondary:hover {
+            box-shadow: 0 6px 20px rgba(108, 117, 125, 0.6);
+        }
+        
+        /* Fitting Workspace */
+        #workspace {
+            text-align: center;
+        }
+        
+        .instructions-box {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            text-align: left;
+        }
+        
+        .instructions-box h3 {
+            color: #856404;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        
+        .instructions-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .instructions-box li {
+            color: #856404;
+            margin-bottom: 8px;
+            padding-left: 25px;
+            position: relative;
+        }
+        
+        .instructions-box li:before {
+            content: "👉";
+            position: absolute;
+            left: 0;
+        }
+        
+        /* Canvas Area */
+        #editor-area { 
+            position: relative; 
+            display: inline-block; 
+            margin: 20px 0;
+            border: 3px solid #667eea;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            background: #f8f9fa;
+        }
+        
+        canvas { 
+            display: block; 
+            max-width: 100%;
+            height: auto;
+        }
+        
+        /* Controls */
+        .controls { 
+            margin-top: 25px; 
+            padding: 25px; 
+            background: #f8f9fa;
+            border-radius: 12px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .controls .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .controls .button-group button,
+        .controls .button-group a {
+            flex: 0 0 auto;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 { font-size: 1.8em; }
+            .content { padding: 20px; }
+            .form-card { padding: 20px; }
+            button, .btn { padding: 12px 24px; font-size: 1em; }
+        }
+        
+        /* Loading State */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>⚽ Virtual Try-On Studio</h1>
+        <p>Experience your favorite jersey with AI-powered fitting</p>
+    </div>
+    
+    <div class="content">
+        {% if not result_image %}
+        <div class="upload-section">
+            <form action="/upload" method="post" enctype="multipart/form-data">
+                <div class="form-card">
+                    <div class="form-group">
+                        <label>
+                            <span class="step">1</span>
+                            Upload Your Photo
+                        </label>
+                        <input type="file" name="user_image" required accept="image/*">
+                        <small style="color: #6c757d; display: block; margin-top: 8px;">
+                            📸 Recommended: Full body photo with clear lighting
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <span class="step">2</span>
+                            Choose Your Jersey
+                        </label>
+                        <select name="jersey_select">
+                            {% for j in jerseys %}
+                            <option value="{{ j }}">{{ j }}</option>
+                            {% endfor %}
+                        </select>
+                        <small style="color: #6c757d; display: block; margin-top: 8px;">
+                            👕 Select from Premier League collection
+                        </small>
+                    </div>
+                </div>
+                
+                <button type="submit">
+                    🚀 Start Virtual Fitting
+                </button>
+            </form>
+        </div>
+        {% endif %}
+
+        {% if result_image %}
+        <div id="workspace">
+            <div class="instructions-box">
+                <h3>🎯 Adjustment Guide</h3>
+                <ul>
+                    <li>Drag the <strong style="color: #00ff00;">GREEN POINTS</strong> to adjust jersey position</li>
+                    <li>Move shoulder points to match your body width</li>
+                    <li>Adjust waist points for better fit</li>
+                    <li>Click <strong>"Update Fitting"</strong> to apply changes</li>
+                </ul>
+            </div>
+
+            <div id="editor-area">
+                <img id="resultImg" src="{{ result_image }}" style="display: none;">
+                <canvas id="mainCanvas"></canvas>
+            </div>
+
+            <div class="controls">
+                <div class="button-group">
+                    <button onclick="sendUpdate()">
+                        🔄 Update Fitting
+                    </button>
+                    <a href="/upload" class="btn secondary">
+                        📷 Upload New Photo
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        // --- DATA DARI FLASK ---
+        // Kita terima data landmarks JSON dari Python
+        let landmarks = {{ landmarks | safe }}; 
+        const jerseyName = "{{ selected_jersey }}";
+        const userImgPath = "{{ user_image_path.replace('\\', '/') }}"; // Fix path windows
+        
+        // Konfigurasi Canvas
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const img = document.getElementById('resultImg');
+        
+        let scale = 1; // Skala tampilan jika gambar terlalu besar
+        let isDragging = false;
+        let dragIndex = -1;
+        const POINT_RADIUS = 8;
+
+        // Inisialisasi saat gambar loading selesai
+        img.onload = function() {
+            // Set ukuran canvas sesuai gambar asli
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            drawAll();
+        };
+
+        // Fungsi Menggambar Ulang (Gambar + Garis + Titik)
+        function drawAll() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 1. Gambar Foto Hasil
+            ctx.drawImage(img, 0, 0);
+
+            // 2. Gambar Garis Kerangka (Wireframe)
+            ctx.beginPath();
+            ctx.strokeStyle = "rgba(0, 255, 0, 0.6)"; // Hijau transparan
+            ctx.lineWidth = 3;
+            
+            // Urutan Titik: 0:BahuL, 1:LeherL, 2:LeherR, 3:BahuR, 4:LenganL, 5:LenganR, 6:PinggangL, 7:PinggangR
+            // Kita hubungkan jadi bentuk baju
+            ctx.moveTo(landmarks[0][0], landmarks[0][1]); // Bahu L
+            ctx.lineTo(landmarks[1][0], landmarks[1][1]); // Leher L
+            ctx.lineTo(landmarks[2][0], landmarks[2][1]); // Leher R
+            ctx.lineTo(landmarks[3][0], landmarks[3][1]); // Bahu R
+            ctx.lineTo(landmarks[5][0], landmarks[5][1]); // Lengan R (Bawah)
+            ctx.lineTo(landmarks[7][0], landmarks[7][1]); // Pinggang R
+            ctx.lineTo(landmarks[6][0], landmarks[6][1]); // Pinggang L
+            ctx.lineTo(landmarks[4][0], landmarks[4][1]); // Lengan L (Bawah)
+            ctx.closePath();
+            ctx.stroke();
+
+            // 3. Gambar Titik Kontrol (Draggable)
+            landmarks.forEach((pt, i) => {
+                ctx.beginPath();
+                ctx.arc(pt[0], pt[1], POINT_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = "#00ff00"; // Hijau Neon
+                ctx.fill();
+                ctx.strokeStyle = "white";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Label (Opsional)
+                ctx.fillStyle = "black";
+                ctx.font = "bold 12px Arial";
+                // ctx.fillText(i+1, pt[0]+10, pt[1]); 
+            });
+        }
+
+        // --- MOUSE EVENTS (DRAGGING) ---
+        
+        function getMousePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            // Hitung skala kalau canvas di-resize oleh CSS
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (evt.clientX - rect.left) * scaleX,
+                y: (evt.clientY - rect.top) * scaleY
+            };
+        }
+
+        canvas.onmousedown = function(e) {
+            const mouse = getMousePos(e);
+            
+            // Cek apakah klik kena titik?
+            for (let i = 0; i < landmarks.length; i++) {
+                const dx = mouse.x - landmarks[i][0];
+                const dy = mouse.y - landmarks[i][1];
+                if (dx*dx + dy*dy < POINT_RADIUS * POINT_RADIUS * 4) { // Hitbox agak besar dikit
+                    isDragging = true;
+                    dragIndex = i;
+                    break;
+                }
+            }
+        };
+
+        canvas.onmousemove = function(e) {
+            if (isDragging) {
+                const mouse = getMousePos(e);
+                landmarks[dragIndex][0] = mouse.x;
+                landmarks[dragIndex][1] = mouse.y;
+                drawAll(); // Redraw realtime
+                canvas.style.cursor = "grabbing";
+            } else {
+                // Hover effect cursor
+                const mouse = getMousePos(e);
+                let hit = false;
+                for (let i = 0; i < landmarks.length; i++) {
+                    const dx = mouse.x - landmarks[i][0];
+                    const dy = mouse.y - landmarks[i][1];
+                    if (dx*dx + dy*dy < POINT_RADIUS * POINT_RADIUS * 4) hit = true;
+                }
+                canvas.style.cursor = hit ? "grab" : "default";
+            }
+        };
+
+        canvas.onmouseup = function() {
+            isDragging = false;
+            dragIndex = -1;
+            canvas.style.cursor = "default";
+        };
+
+        // --- KIRIM UPDATE KE SERVER ---
+        function sendUpdate() {
+            const btn = document.querySelector("button");
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> Processing...';
+            btn.disabled = true;
+
+            fetch('/update_warp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    points: landmarks,       // Titik yang sudah digeser user
+                    jersey: jerseyName,      // Nama jersey
+                    user_image_path: userImgPath // Path foto asli (untuk diproses ulang)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'ok') {
+                    // Update gambar background dengan hasil baru
+                    img.src = data.image_url;
+                    // img.onload akan otomatis memanggil drawAll() lagi
+                } else {
+                    alert("❌ Failed to update: " + data.error);
+                }
+                btn.innerHTML = "🔄 Update Fitting";
+                btn.disabled = false;
+            })
+            .catch(err => {
+                console.error(err);
+                alert("⚠️ Connection error. Please try again.");
+                btn.innerHTML = "🔄 Update Fitting";
+                btn.disabled = false;
+            });
+        }
+        </script>
+        {% endif %}
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,123 @@
+{% extends "layout.html" %}
+
+{% block title %}Home - Jersey Virtual Try-On{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <!-- Header Section -->
+        <div class="text-center mb-5">
+            <h1 class="display-4 fw-bold text-white mb-3">
+                <i class="bi bi-stars"></i> Welcome to Jersey Virtual Try-On
+            </h1>
+            <p class="lead text-white-50">
+                Pilih mode untuk mencoba jersey sepak bola secara virtual
+            </p>
+        </div>
+
+        <!-- Mode Selection Cards -->
+        <div class="row g-4">
+            <!-- Live Streaming Card -->
+            <div class="col-md-6">
+                <div class="card h-100 border-0 shadow-lg">
+                    <div class="card-body text-center p-5">
+                        <div class="mb-4">
+                            <i class="bi bi-camera-video display-1 text-primary"></i>
+                        </div>
+                        <h2 class="card-title fw-bold mb-3">Live Streaming</h2>
+                        <p class="card-text text-muted mb-4">
+                            Gunakan webcam untuk mencoba jersey secara real-time. 
+                            Lihat langsung bagaimana jersey terlihat di tubuh Anda dengan teknologi pose detection.
+                        </p>
+                        <ul class="list-unstyled text-start mb-4">
+                            <li class="mb-2">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                Real-time processing
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                Ganti jersey secara langsung
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                Pose detection otomatis
+                            </li>
+                        </ul>
+                        <a href="/live" class="btn btn-primary btn-lg w-100">
+                            <i class="bi bi-play-circle me-2"></i>Mulai Streaming
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Photo Card -->
+            <div class="col-md-6">
+                <div class="card h-100 border-0 shadow-lg">
+                    <div class="card-body text-center p-5">
+                        <div class="mb-4">
+                            <i class="bi bi-cloud-upload display-1 text-success"></i>
+                        </div>
+                        <h2 class="card-title fw-bold mb-3">Upload Foto</h2>
+                        <p class="card-text text-muted mb-4">
+                            Upload foto Anda dan lihat hasilnya dengan jersey pilihan. 
+                            Cocok untuk membuat foto profil atau konten media sosial.
+                        </p>
+                        <ul class="list-unstyled text-start mb-4">
+                            <li class="mb-2">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                Upload gambar apapun
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                Hasil berkualitas tinggi
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                Download hasil processing
+                            </li>
+                        </ul>
+                        <a href="/upload" class="btn btn-success btn-lg w-100">
+                            <i class="bi bi-upload me-2"></i>Upload Foto
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="row mt-5">
+            <div class="col-12">
+                <div class="card bg-white bg-opacity-90">
+                    <div class="card-body p-4">
+                        <h5 class="card-title fw-bold mb-3">
+                            <i class="bi bi-info-circle me-2"></i>Cara Penggunaan
+                        </h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="fw-bold text-primary">Mode Live Streaming:</h6>
+                                <ol class="small">
+                                    <li>Klik tombol "Mulai Streaming"</li>
+                                    <li>Izinkan akses webcam jika diminta</li>
+                                    <li>Posisikan tubuh menghadap kamera</li>
+                                    <li>Pilih jersey dari daftar yang tersedia</li>
+                                    <li>Jersey akan otomatis diterapkan secara real-time</li>
+                                </ol>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="fw-bold text-success">Mode Upload Foto:</h6>
+                                <ol class="small">
+                                    <li>Klik tombol "Upload Foto"</li>
+                                    <li>Pilih jersey yang diinginkan</li>
+                                    <li>Klik "Choose File" untuk upload gambar</li>
+                                    <li>Klik "Process Image" untuk memproses</li>
+                                    <li>Hasil akan ditampilkan di bawah form</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
