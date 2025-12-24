@@ -1,92 +1,98 @@
 """
-Jersey Loader Utility
-Helper untuk load dan pre-process jersey images
+Jersey Loader Module
+Untuk load dan cache jersey images
 """
 
-import cv2
-import numpy as np
 import os
+import cv2
 import json
 
 class JerseyLoader:
-    @staticmethod
-    def apply_3d_cylindrical_warp(jersey_img, strength=0.15):
-        """
-        Apply cylindrical warp untuk efek 3D melengkung
-        
-        Args:
-            jersey_img: Jersey image (BGRA)
-            strength: Kekuatan lengkungan (0.0-0.5)
-        
-        Returns:
-            Warped jersey image
-        """
-        h, w = jersey_img.shape[:2]
-        result = np.zeros_like(jersey_img)
-        
-        center_x = w / 2
-        max_offset = strength * w
-        
-        for y in range(h):
-            for x in range(w):
-                distance_from_center = abs(x - center_x)
-                normalized_distance = distance_from_center / center_x
-                
-                # Parabolic curve
-                horizontal_offset = int(max_offset * (normalized_distance ** 2))
-                
-                if x < center_x:
-                    src_x = x - horizontal_offset
-                else:
-                    src_x = x + horizontal_offset
-                
-                src_x = max(0, min(w - 1, src_x))
-                result[y, x] = jersey_img[y, src_x]
-        
-        return result
+    """Utility class untuk loading jersey images dan metadata"""
     
-    @staticmethod
-    def load_and_prepare_jersey(jersey_path, warp_strength=0.15):
+    def __init__(self, jersey_folder='Assets/Jerseys/PremierLeague/Home_NOBG', 
+                 metadata_file='jersey_metadata.json',
+                 landmarks_file='jersey_landmarks.json'):
+        self.jersey_folder = jersey_folder
+        self.metadata_file = metadata_file
+        self.landmarks_file = landmarks_file
+        self.jersey_cache = {}
+        
+        # Load metadata dan landmarks
+        self.metadata = self._load_json(metadata_file)
+        self.landmarks = self._load_json(landmarks_file)
+    
+    def _load_json(self, filepath):
+        """Load JSON file"""
+        try:
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"[JerseyLoader] Warning: Could not load {filepath}: {e}")
+        return {}
+    
+    def get_jersey(self, jersey_name, use_cache=True):
         """
-        Load jersey dan apply pre-processing
+        Load jersey image (dengan caching)
         
         Args:
-            jersey_path: Path ke file jersey
-            warp_strength: Cylindrical warp strength
-        
+            jersey_name: Nama file jersey
+            use_cache: Gunakan cache atau tidak
+            
         Returns:
-            Prepared jersey (BGRA) or None if failed
+            Jersey image (BGRA format) atau None
         """
-        img = cv2.imread(jersey_path, cv2.IMREAD_UNCHANGED)
+        # Check cache first
+        if use_cache and jersey_name in self.jersey_cache:
+            return self.jersey_cache[jersey_name].copy()
         
-        if img is None:
-            print(f"[ERROR] Gagal load jersey: {jersey_path}")
+        # Load from disk
+        jersey_path = os.path.join(self.jersey_folder, jersey_name)
+        
+        if not os.path.exists(jersey_path):
+            print(f"[JerseyLoader] Jersey not found: {jersey_path}")
             return None
         
-        # Ensure BGRA
-        if img.shape[2] == 3:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
-            img[:, :, 3] = 255
+        # Read with alpha channel
+        jersey_img = cv2.imread(jersey_path, cv2.IMREAD_UNCHANGED)
         
-        # Apply 3D warp
-        warped = JerseyLoader.apply_3d_cylindrical_warp(img, warp_strength)
+        if jersey_img is None:
+            print(f"[JerseyLoader] Failed to read jersey: {jersey_path}")
+            return None
         
-        print(f"[INFO] Jersey prepared: {os.path.basename(jersey_path)} ({warped.shape[1]}x{warped.shape[0]})")
+        # Ensure BGRA format
+        if len(jersey_img.shape) < 3 or jersey_img.shape[2] < 4:
+            if len(jersey_img.shape) == 3 and jersey_img.shape[2] == 3:
+                # Add alpha channel
+                b, g, r = cv2.split(jersey_img)
+                alpha = cv2.cvtColor(jersey_img, cv2.COLOR_BGR2GRAY)
+                _, alpha = cv2.threshold(alpha, 10, 255, cv2.THRESH_BINARY)
+                jersey_img = cv2.merge((b, g, r, alpha))
         
-        return warped
+        # Cache it
+        if use_cache:
+            self.jersey_cache[jersey_name] = jersey_img.copy()
+        
+        return jersey_img
     
-    @staticmethod
-    def load_metadata(metadata_file):
-        """Load jersey metadata JSON"""
-        if os.path.exists(metadata_file):
-            try:
-                with open(metadata_file, 'r') as f:
-                    data = json.load(f)
-                print(f"[INFO] Metadata loaded: {len(data)} jerseys")
-                return data
-            except Exception as e:
-                print(f"[WARN] Failed to load metadata: {e}")
-                return {}
-        else:
-            print(f"[WARN] Metadata file not found: {metadata_file}")
-            return {}
+    def get_metadata(self, jersey_name):
+        """Get metadata untuk jersey tertentu"""
+        return self.metadata.get(jersey_name, {})
+    
+    def get_landmarks(self, jersey_name):
+        """Get landmarks untuk jersey tertentu"""
+        return self.landmarks.get(jersey_name, {})
+    
+    def list_jerseys(self):
+        """List semua jersey yang tersedia"""
+        jerseys = []
+        if os.path.exists(self.jersey_folder):
+            for f in os.listdir(self.jersey_folder):
+                if f.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    jerseys.append(f)
+        return sorted(jerseys)
+    
+    def clear_cache(self):
+        """Clear jersey cache"""
+        self.jersey_cache.clear()

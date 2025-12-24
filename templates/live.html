@@ -121,57 +121,6 @@
             </div>
         </div>
 
-        <!-- Adjustment Controls Card -->
-        <div class="card mt-4">
-            <div class="card-header bg-info text-white">
-                <h6 class="mb-0">
-                    <i class="bi bi-sliders me-2"></i>Adjustment Controls
-                </h6>
-            </div>
-            <div class="card-body">
-                <!-- Offset X -->
-                <div class="mb-3">
-                    <label for="offsetX" class="form-label small fw-semibold">
-                        Posisi Horizontal (X): <span id="offsetXValue">0</span>px
-                    </label>
-                    <input type="range" class="form-range" min="-100" max="100" value="0" id="offsetX">
-                    <div class="d-flex justify-content-between">
-                        <small class="text-muted">Kiri</small>
-                        <small class="text-muted">Kanan</small>
-                    </div>
-                </div>
-
-                <!-- Offset Y -->
-                <div class="mb-3">
-                    <label for="offsetY" class="form-label small fw-semibold">
-                        Posisi Vertikal (Y): <span id="offsetYValue">0</span>px
-                    </label>
-                    <input type="range" class="form-range" min="-100" max="100" value="0" id="offsetY">
-                    <div class="d-flex justify-content-between">
-                        <small class="text-muted">Atas</small>
-                        <small class="text-muted">Bawah</small>
-                    </div>
-                </div>
-
-                <!-- Scale -->
-                <div class="mb-3">
-                    <label for="scale" class="form-label small fw-semibold">
-                        Ukuran (Scale): <span id="scaleValue">100</span>%
-                    </label>
-                    <input type="range" class="form-range" min="50" max="150" value="100" id="scale">
-                    <div class="d-flex justify-content-between">
-                        <small class="text-muted">50%</small>
-                        <small class="text-muted">150%</small>
-                    </div>
-                </div>
-
-                <!-- Reset Button -->
-                <button class="btn btn-sm btn-outline-secondary w-100" onclick="resetAdjustments()">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset ke Default
-                </button>
-            </div>
-        </div>
-
         <!-- Tips Card -->
         <div class="card mt-4">
             <div class="card-body">
@@ -184,7 +133,6 @@
                     <li>Berdiri dengan jarak 1-2 meter dari kamera</li>
                     <li>Pastikan seluruh tubuh bagian atas terlihat di frame</li>
                     <li>Hindari background yang terlalu ramai</li>
-                    <li><strong>Gunakan slider adjustment untuk posisi yang sempurna</strong></li>
                 </ul>
             </div>
         </div>
@@ -314,52 +262,6 @@
         // Sembunyikan loading saat gambar baru mulai dimuat
         setTimeout(hideLoading, 1000);
     }
-    
-    // Adjustment slider handlers
-    function updateAdjustments() {
-        const offsetX = document.getElementById('offsetX').value;
-        const offsetY = document.getElementById('offsetY').value;
-        const scale = document.getElementById('scale').value;
-        
-        // Update display values
-        document.getElementById('offsetXValue').textContent = offsetX;
-        document.getElementById('offsetYValue').textContent = offsetY;
-        document.getElementById('scaleValue').textContent = scale;
-        
-        // Send adjustments to backend
-        fetch('/update_adjustments', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                offset_x: parseInt(offsetX),
-                offset_y: parseInt(offsetY),
-                scale: parseFloat(scale) / 100.0
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log('Adjustments updated:', data);
-        })
-        .catch(error => {
-            console.error('Error updating adjustments:', error);
-        });
-    }
-    
-    function resetAdjustments() {
-        document.getElementById('offsetX').value = 0;
-        document.getElementById('offsetY').value = 0;
-        document.getElementById('scale').value = 100;
-        updateAdjustments();
-    }
-    
-    // Add event listeners for sliders
-    document.addEventListener('DOMContentLoaded', function() {
-        document.getElementById('offsetX').addEventListener('input', updateAdjustments);
-        document.getElementById('offsetY').addEventListener('input', updateAdjustments);
-        document.getElementById('scale').addEventListener('input', updateAdjustments);
-    });
 
     // Update tampilan button jersey yang aktif
     function updateActiveJersey(jerseyName) {

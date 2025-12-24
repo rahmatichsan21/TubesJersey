@@ -194,20 +194,39 @@ class LiveStreamProcessor:
             if warped_jersey.shape[2] < 4:
                 return user_frame  # Skip blending jika tidak ada alpha
             
-            # --- ALPHA BLENDING OPTIMAL (VECTORIZED) ---
+            # --- OCCLUSION HANDLING (Body Segmentation Mask) ---
+            # Konversi segmentation mask ke format yang bisa dipakai (0-255)
+            body_mask_binary = (body_mask > 0.5).astype(np.uint8) * 255
+            
+            # Resize mask jika perlu (MediaPipe mask kadang ukuran berbeda)
+            if body_mask_binary.shape[:2] != (h, w):
+                body_mask_binary = cv2.resize(body_mask_binary, (w, h), interpolation=cv2.INTER_LINEAR)
+            
+            # Dilate mask sedikit untuk mencegah jersey "terpotong" terlalu dalam
+            kernel = np.ones((5, 5), np.uint8)
+            body_mask_dilated = cv2.dilate(body_mask_binary, kernel, iterations=1)
+            
+            # Convert mask to 3-channel untuk operasi masking
+            body_mask_3ch = np.stack([body_mask_dilated] * 3, axis=-1).astype(np.float32) / 255.0
+            
+            # --- ALPHA BLENDING OPTIMAL (VECTORIZED + MASKED) ---
             # 1. Normalisasi Alpha Channel (0.0 - 1.0)
             # Ubah dimensi dari (H, W) menjadi (H, W, 1) agar bisa dikalikan ke 3 channel warna (BGR)
             alpha_channel = (warped_jersey[:, :, 3] / 255.0).astype(np.float32)
             alpha_channel = np.expand_dims(alpha_channel, axis=2)  # Shape jadi (H, W, 1)
             
-            # 2. Ambil komponen warna Jersey (BGR) dan Background (User)
+            # 2. Combine alpha dengan body mask
+            # Jersey hanya muncul di area yang: (1) punya alpha, DAN (2) ada di body mask
+            combined_alpha = alpha_channel * body_mask_3ch
+            
+            # 3. Ambil komponen warna Jersey (BGR) dan Background (User)
             jersey_bgr = warped_jersey[:, :, :3].astype(np.float32)
             user_bgr = user_frame.astype(np.float32)
             
-            # 3. Blending Matriks (Vectorized Operation)
-            # Rumus: (Jersey * Alpha) + (User * (1 - Alpha))
+            # 4. Blending Matriks (Vectorized Operation)
+            # Rumus: (Jersey * CombinedAlpha) + (User * (1 - CombinedAlpha))
             # Ini dilakukan sekaligus untuk jutaan pixel dalam hitungan milidetik
-            blended = (jersey_bgr * alpha_channel) + (user_bgr * (1.0 - alpha_channel))
+            blended = (jersey_bgr * combined_alpha) + (user_bgr * (1.0 - combined_alpha))
             
             # 4. Kembalikan ke format Integer 8-bit (Gambar valid)
             result = blended.astype(np.uint8)

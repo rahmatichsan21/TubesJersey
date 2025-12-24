@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 # Pastikan file ini ada di folder processor/photo_processor_ai.py
 from processor.photo_processor_ai import PhotoProcessor
 from processor.live_processor import LiveStreamProcessor
+from processor.cylindrical_warp import apply_cylindrical_to_jersey
 
 app = Flask(__name__)
 
@@ -105,6 +106,10 @@ def upload_file():
             
             if user_image is None or jersey_image is None:
                 return "Gagal membaca gambar", 500
+            
+            # 4.5 CYLINDRICAL WARP: Terapkan efek 3D ke jersey
+            print(f"[3D PHOTO] Applying cylindrical warp to: {selected_jersey}")
+            jersey_image = apply_cylindrical_to_jersey(jersey_image, strength=0.7)
 
             # 5. PROSES AWAL (Auto-Detect)
             # Kita panggil get_body_landmarks dulu untuk dikirim ke frontend
@@ -163,6 +168,10 @@ def update_warp():
     user_image = cv2.imread(user_img_path)
     jersey_path = os.path.join(JERSEY_FOLDER, jersey_name)
     jersey_image = cv2.imread(jersey_path, cv2.IMREAD_UNCHANGED)
+    
+    # 1.5 Apply Cylindrical Warp
+    print(f"[3D ADJUST] Applying cylindrical warp to: {jersey_name}")
+    jersey_image = apply_cylindrical_to_jersey(jersey_image, strength=0.7)
     
     # 2. Re-Process dengan CUSTOM POINTS
     # Prosesor akan memakai titik yang dikirim user, bukan MediaPipe
@@ -257,12 +266,17 @@ def generate_frames(jersey_name=None):
                     alpha = np.ones_like(b) * 255
                     img = cv2.merge((b, g, r, alpha))
                 
+                # CYLINDRICAL WARP: Terapkan efek 3D (dilakukan sekali saat load)
+                if img is not None:
+                    print(f"[3D] Applying cylindrical warp to: {jersey_name}")
+                    img = apply_cylindrical_to_jersey(img, strength=0.7)
+                
                 meta = jersey_metadata.get(jersey_name, None)
                 if img is not None:
                     JERSEY_CACHE[jersey_name] = (img, meta)  # Simpan ke cache
                     active_jersey_img = img
                     active_jersey_meta = meta
-                    print(f"[CACHE MISS] Loaded & Cached: {jersey_name}")
+                    print(f"[CACHE MISS] Loaded & Cached with 3D Effect: {jersey_name}")
     
     print(f"[INFO] Camera streaming dimulai... Jersey: {jersey_name or 'None'}")
     frame_count = 0
