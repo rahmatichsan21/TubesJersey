@@ -2,7 +2,9 @@ import os
 import cv2
 import json
 import time
+import base64
 import numpy as np
+from io import BytesIO
 from flask import Flask, render_template, request, jsonify, url_for, Response
 from werkzeug.utils import secure_filename
 
@@ -15,17 +17,11 @@ from processor.cylindrical_warp import apply_cylindrical_to_jersey
 app = Flask(__name__)
 
 # --- KONFIGURASI ---
-UPLOAD_FOLDER = 'static/uploads'
-RESULT_FOLDER = 'static/results'
 JERSEY_FOLDER = 'Assets/Jerseys/PremierLeague/Home_NOBG' # Sesuaikan path ini
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['RESULT_FOLDER'] = RESULT_FOLDER
-
-# Buat folder jika belum ada
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(RESULT_FOLDER, exist_ok=True)
+# Session storage untuk menyimpan data sementara (di memory)
+user_sessions = {}
 
 # Load Jersey Metadata & Landmarks
 METADATA_FILE = 'jersey_metadata.json'
@@ -90,18 +86,17 @@ def upload_file():
         if file.filename == '':
             return "No selected file", 400
         
-        # 2. Simpan Foto User
+        # 2. Baca Foto User langsung dari memory (tanpa simpan ke disk)
         if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            user_img_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(user_img_path)
+            # Baca file langsung ke numpy array
+            file_bytes = np.frombuffer(file.read(), np.uint8)
+            user_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
             
             # 3. Ambil Pilihan Jersey
             selected_jersey = request.form.get('jersey_select')
             jersey_path = os.path.join(JERSEY_FOLDER, selected_jersey)
             
-            # 4. Baca Gambar
-            user_image = cv2.imread(user_img_path)
+            # 4. Baca Gambar Jersey
             jersey_image = cv2.imread(jersey_path, cv2.IMREAD_UNCHANGED) # Baca Alpha Channel
             
             if user_image is None or jersey_image is None:
@@ -137,18 +132,27 @@ def upload_file():
                 custom_body_points=None # Pakai auto dulu
             )
             
-            # Simpan Hasil
-            result_filename = f"result_{int(time.time())}.jpg"
-            result_path = os.path.join(app.config['RESULT_FOLDER'], result_filename)
-            cv2.imwrite(result_path, result_image)
+            # Generate session ID unik
+            session_id = f"session_{int(time.time())}_{np.random.randint(1000, 9999)}"
+            
+            # Simpan data di memory (session storage)
+            user_sessions[session_id] = {
+                'user_image': user_image,
+                'selected_jersey': selected_jersey
+            }
+            
+            # Convert result image ke base64
+            _, buffer = cv2.imencode('.jpg', result_image, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            result_base64 = base64.b64encode(buffer).decode('utf-8')
+            result_data_url = f"data:image/jpeg;base64,{result_base64}"
             
             # 6. RENDER HALAMAN DENGAN DATA LANDMARK
             return render_template('upload.html', 
                                    jerseys=jerseys,
-                                   result_image=result_path,
-                                   user_image_path=user_img_path,     # Path asli (untuk re-process)
-                                   selected_jersey=selected_jersey,   # Nama jersey
-                                   landmarks=json.dumps(landmarks_list) # Data titik untuk JS
+                                   result_image=result_data_url,
+                                   session_id=session_id,
+                                   selected_jersey=selected_jersey,
+                                   landmarks=json.dumps(landmarks_list)
                                    )
 
     return render_template('upload.html', jerseys=jerseys)
@@ -159,13 +163,14 @@ def update_warp():
     data = request.json
     points = data['points']       # List [[x,y], [x,y]...] dari JS
     jersey_name = data['jersey']
-    user_img_path = data['user_image_path'] # Kita kirim balik path ini dari frontend
+    session_id = data['session_id'] # Session ID untuk retrieve data dari memory
     
-    # Validasi path (Security check sederhana)
-    if 'static' not in user_img_path: return jsonify({'error': 'Invalid path'}), 400
+    # Validasi session
+    if session_id not in user_sessions:
+        return jsonify({'error': 'Session expired or invalid'}), 400
 
-    # 1. Load Gambar
-    user_image = cv2.imread(user_img_path)
+    # 1. Load Gambar dari session storage (memory)
+    user_image = user_sessions[session_id]['user_image']
     jersey_path = os.path.join(JERSEY_FOLDER, jersey_name)
     jersey_image = cv2.imread(jersey_path, cv2.IMREAD_UNCHANGED)
     
@@ -182,14 +187,14 @@ def update_warp():
         custom_body_points=points 
     )
     
-    # 3. Simpan & Return URL
-    new_filename = f"adjusted_{int(time.time())}.jpg"
-    new_path = os.path.join(app.config['RESULT_FOLDER'], new_filename)
-    cv2.imwrite(new_path, result_image)
+    # 3. Convert ke base64 dan return
+    _, buffer = cv2.imencode('.jpg', result_image, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    result_base64 = base64.b64encode(buffer).decode('utf-8')
+    result_data_url = f"data:image/jpeg;base64,{result_base64}"
     
     return jsonify({
         'status': 'ok', 
-        'image_url': new_path + '?t=' + str(time.time()) # Timestamp agar tidak cache
+        'image_url': result_data_url
     })
 
 @app.route('/live', methods=['GET'])

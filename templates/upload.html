@@ -336,6 +336,9 @@
                     <button onclick="sendUpdate()">
                         🔄 Update Fitting
                     </button>
+                    <button onclick="downloadResult()" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                        📥 Download Result
+                    </button>
                     <a href="/upload" class="btn secondary">
                         📷 Upload New Photo
                     </a>
@@ -348,7 +351,7 @@
         // Kita terima data landmarks JSON dari Python
         let landmarks = {{ landmarks | safe }}; 
         const jerseyName = "{{ selected_jersey }}";
-        const userImgPath = "{{ user_image_path.replace('\\', '/') }}"; // Fix path windows
+        const sessionId = "{{ session_id }}"; // Session ID untuk re-processing
         
         // Konfigurasi Canvas
         const canvas = document.getElementById('mainCanvas');
@@ -477,13 +480,13 @@
                 body: JSON.stringify({
                     points: landmarks,       // Titik yang sudah digeser user
                     jersey: jerseyName,      // Nama jersey
-                    user_image_path: userImgPath // Path foto asli (untuk diproses ulang)
+                    session_id: sessionId    // Session ID untuk retrieve data dari memory
                 })
             })
             .then(response => response.json())
             .then(data => {
                 if(data.status === 'ok') {
-                    // Update gambar background dengan hasil baru
+                    // Update gambar background dengan hasil baru (base64)
                     img.src = data.image_url;
                     // img.onload akan otomatis memanggil drawAll() lagi
                 } else {
@@ -498,6 +501,31 @@
                 btn.innerHTML = "🔄 Update Fitting";
                 btn.disabled = false;
             });
+        }
+
+        // --- DOWNLOAD RESULT ---
+        function downloadResult() {
+            // Buat canvas baru untuk download tanpa titik dan garis
+            const downloadCanvas = document.createElement('canvas');
+            const downloadCtx = downloadCanvas.getContext('2d');
+            
+            downloadCanvas.width = canvas.width;
+            downloadCanvas.height = canvas.height;
+            
+            // Gambar hanya foto hasil tanpa overlay
+            downloadCtx.drawImage(img, 0, 0);
+            
+            // Convert canvas ke blob dan download
+            downloadCanvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `jersey_fitting_${Date.now()}.jpg`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 'image/jpeg', 0.95);
         }
         </script>
         {% endif %}
